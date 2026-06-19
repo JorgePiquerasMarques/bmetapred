@@ -1,0 +1,26 @@
+Package: bmetapred
+Title: Bayesian Meta-prediction using stacking or pseudo-BMA in the presence of prediction error
+Version: 0.0.0.9000
+Authors@R: c(
+    person("Jorge", "Piqueras Marqués", , "jorge.piqueras.m@gmail.com", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-6812-2106")),
+    person("Anabel", "Forte Deltell", , "anabel.forte@uv.es", role = "aut",
+           comment = c(ORCID = "0000-0001-9534-1817")),
+    person("Joaquin", "Martinez Minaya", , "jmarmin@eio.upv.es", role = "ctb", comment = c(ORCID = "0000-0002-1016-8734"))
+  )
+Description: Fits pseudo-Bayesian Model Averaging (pBMA) and Bayesian Stacking ensembles of lineal meta-models,
+    while explicitly accounting for the prediction errors of the individual models. When native 
+    uncertainty estimates are unavailable, it provides tools to estimate heteroscedastic 
+    errors via Local Polynomial Regression (LOESS). The meta-model space is explored 
+    using exhaustive search or a Markov Chain Monte Carlo Model Composition (MC3) algorithm 
+    powered by 'brms'.
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 8.0.0
+Imports: 
+    brms,
+    future,
+    future.apply,
+    loo,
+    stats
