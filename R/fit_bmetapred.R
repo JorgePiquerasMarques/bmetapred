@@ -26,12 +26,21 @@
 #'   Default is 50.
 #' @param pri_sd Numeric. Prior standard deviation for the regression coefficients.
 #'   Default is 2.5.
+#' @param pri_sd_int Numeric. Prior standard deviation for the intercepts.
+#'   Default is 5.
+#' @param pri_sd_int_sigma Numeric. Prior standard deviation for the sigma intercept. Default is 2.
+#' @param pri_sd_sigma Numeric. Prior standard deviation for the sigma coefficients.
+#'   Default is 0.5.
 #' @param parallel_workers Integer. Number of workers for parallel evaluation of the model space.
 #'   Default is 1 (sequential execution).
 #' @param cores_stan Integer. Number of cores to use for each underlying brms model. Default is 1.
 #' @param iter_stan Integer. Number of MCMC iterations for the underlying brms models. Default is 1500.
 #' @param verbosity Integer. Level of printed messages. \code{0} suppresses output,
 #'   \code{1} prints progress. Default is 1.
+#' @param backend Character string specifying the package to use as the backend for \code{brms}. 
+#'   Default is \code{"rstan"}. However, for intensive computational tasks and large model spaces, 
+#'   we highly recommend installing \code{"cmdstanr"} (available from the Stan-dev repository) 
+#'   and setting \code{backend = "cmdstanr"} to improve memory management and speed.
 #'
 #' @return An object of class \code{bmetapred_model} containing the optimized ensemble weights,
 #'   the list of selected model indices, the compiled \code{brms} base templates,
@@ -42,56 +51,54 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Toy example
+#' \donttest{
+#' set.seed(123)
 #' df <- data.frame(
-#'   Y = rnorm(50),
-#'   M1 = rnorm(50), M2 = rnorm(50), M3 = rnorm(50),
-#'   sd_M1 = rep(0.1, 50), sd_M2 = rep(0.2, 50), sd_M3 = rep(0.15, 50)
+#'   Y = rnorm(30),
+#'   M1 = rnorm(30), M2 = rnorm(30),
+#'   sd_M1 = rep(0.1, 30), sd_M2 = rep(0.2, 30)
 #' )
 #'
 #' my_ensemble <- fit_bmetapred(
 #'   data_train = df,
 #'   y = "Y",
-#'   predictors = c("M1", "M2", "M3"),
-#'   sd_cols = c("sd_M1", "sd_M2", "sd_M3"),
+#'   predictors = c("M1", "M2"),
+#'   sd_cols = c("sd_M1", "sd_M2"),
 #'   method = "stacking",
-#'   parallel_workers = 2,
+#'   parallel_workers = 1,
 #'   cores_stan = 1,
-#'   iter_stan = 1000,
-#'   n_iter_mc3 = 100,
-#'   verbosity = 1
+#'   iter_stan = 300,
+#'   verbosity = 0
 #' )
+#' summary(my_ensemble)
 #' }
 
 fit_bmetapred <- function(data_train, y, predictors, sd_cols,
                           method = c("stacking", "pbma"),
                           p_max_exhaust = 9, n_iter_mc3 = 1500, burnin_pbma = NULL,
-                          min_K = 10, max_K = 50, pri_sd = 2.5,
+                          min_K = 10, max_K = 50, pri_sd = 2.5, pri_sd_int = 5, pri_sd_sigma = 0.5, pri_sd_int_sigma = 5,
                           parallel_workers = 1, cores_stan = 1, iter_stan = 1500,
-                          verbosity = 1) {
-
+                          verbosity = 1, backend = "rstan") {
+  
   method <- match.arg(method)
   p <- length(predictors)
-
+  
   # Configure parallel plan politely (revert to user's plan on exit)
   if (parallel_workers > 1) {
     old_plan <- future::plan()
     future::plan(future::multisession, workers = parallel_workers)
     on.exit(future::plan(old_plan), add = TRUE)
   }
-
+  
   # --- PHASE 0.1: Error cleaning and categorization ---
   auditoria <- audit_and_clean_errors(data_train, predictors, sd_cols, verbosity = verbosity)
   data_train <- auditoria$data
   is_clean <- auditoria$is_clean
-
+  
   max_clean <- sum(is_clean)
   max_noisy <- sum(!is_clean)
   n_modelos_optimizados <- (max_clean + 1) * (max_noisy + 1)
-
-  if (verbosity > 0) cat(sprintf("--- Compiling base models (%d models) ---\n", n_modelos_optimizados))
-
+  
   df_dummy <- data.frame(dummy_y = data_train[[y]])
   names(df_dummy)[1] <- y
   if (max_clean > 0) for(c in 1:max_clean) df_dummy[[paste0("SlotC_", c)]] <- rnorm(nrow(df_dummy))
@@ -101,59 +108,69 @@ fit_bmetapred <- function(data_train, y, predictors, sd_cols,
       df_dummy[[paste0("sd_SlotN_", n)]] <- rep(0.1, nrow(df_dummy))
     }
   }
-
+  
   grid_combs <- expand.grid(C = 0:max_clean, N = 0:max_noisy)
-
-  backend_stan <- "cmdstanr"
+  
+  backend_stan <- backend
   pars_stan <- brms::save_pars(all = FALSE)
-
-  base_models <- future.apply::future_lapply(1:nrow(grid_combs), function(i) {
+  
+  # Función helper para compilar el modelo base (evita repetir código)
+  compile_fn <- function(i) {
     c <- grid_combs$C[i]
     n <- grid_combs$N[i]
     key <- paste0("C", c, "_N", n)
-
+    
     if (c == 0 && n == 0) {
       form <- brms::bf(as.formula(paste(y, "~ 1")))
-      priors_k <- c(brms::set_prior("normal(0, 5)", class = "Intercept"), brms::set_prior("exponential(1)", class = "sigma"))
+      priors_k <- c(brms::set_prior(paste0("normal(0, ", pri_sd_int, ")"), class = "Intercept"), brms::set_prior("exponential(1)", class = "sigma"))
     } else {
       terms_C <- if(c > 0) paste0("SlotC_", 1:c) else NULL
       terms_N <- if(n > 0) paste0("SlotN_", 1:n) else NULL
       form_mean <- as.formula(paste(y, "~", paste(c(terms_C, terms_N), collapse=" + ")))
-
+      
       if (n > 0) {
         terms_sigma <- paste0("sd_SlotN_", 1:n)
         form_sigma <- as.formula(paste("sigma ~", paste(paste0("log(", terms_sigma, ")"), collapse=" + ")))
         form <- brms::bf(form_mean, form_sigma)
-
+        
         priors_k <- c(brms::set_prior(paste0("normal(0, ", pri_sd, ")"), class = "b"),
-                      brms::set_prior("normal(0, 5)", class = "Intercept"),
-                      brms::set_prior("normal(0, 0.5)", class = "b", dpar = "sigma"))
+                      brms::set_prior(paste0("normal(0, ", pri_sd_int, ")"), class = "Intercept"),
+                      brms::set_prior(paste0("normal(0, ", pri_sd_int_sigma, ")"), class = "Intercept", dpar = "sigma"),
+                      brms::set_prior(paste0("normal(0, ", pri_sd_sigma, ")"), class = "b", dpar = "sigma"))
       } else {
         form <- brms::bf(form_mean)
         priors_k <- c(brms::set_prior(paste0("normal(0, ", pri_sd, ")"), class = "b"),
-                      brms::set_prior("normal(0, 5)", class = "Intercept"),
+                      brms::set_prior(paste0("normal(0, ", pri_sd_int, ")"), class = "Intercept"),
                       brms::set_prior("exponential(1)", class = "sigma"))
       }
     }
-
+    
     fit <- suppressWarnings(suppressMessages(brms::brm(formula = form, data = df_dummy, prior = priors_k, family = gaussian(),
                                                        chains = 1, iter = 10, warmup=5,
                                                        backend = backend_stan,
-                                                       cores = cores_stan,
+                                                       cores = 1, # Base comp doesn't need internal multi-core
                                                        refresh = 0, silent = 2,
                                                        save_pars = pars_stan)))
     return(list(key = key, model = fit))
-  }, future.seed = TRUE)
-
+  }
+  
+  if (backend_stan == "cmdstanr" && parallel_workers > 1) {
+    if (verbosity > 0) cat(sprintf("--- Compiling base models in parallel (%d models) ---\n", n_modelos_optimizados))
+    base_models <- future.apply::future_lapply(1:nrow(grid_combs), compile_fn, future.seed = TRUE)
+  } else {
+    if (verbosity > 0) cat(sprintf("--- Compiling base models sequentially (%d models) ---\n", n_modelos_optimizados))
+    base_models <- lapply(1:nrow(grid_combs), compile_fn)
+  }
+  
   base_models_named <- list()
   for (item in base_models) base_models_named[[item$key]] <- item$model
-
+  
   path_base_models <- tempfile(pattern = "plantillas_stan_", fileext = ".rds")
   saveRDS(base_models_named, path_base_models)
-
+  
   rm(base_models, base_models_named)
   gc(verbose = FALSE, full = TRUE)
-
+  
   # --- PHASE 1: SEARCH ---
   search_res <- run_discovery_phase(data_train, y, predictors, sd_cols, path_base_models,
                                     p_max_exhaust, n_iter_mc3, method, verbosity, is_clean,

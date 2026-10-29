@@ -36,9 +36,31 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Assuming `my_ensemble` is a fitted bmetapred_model and `test_data` is available:
-#' predictions <- predict(my_ensemble, newdata = test_data, n_samples_totales = 1000)
+#' \donttest{
+#' set.seed(123)
+#' df_train <- data.frame(
+#'   Y = rnorm(30),
+#'   M1 = rnorm(30), M2 = rnorm(30),
+#'   sd_M1 = rep(0.1, 30), sd_M2 = rep(0.2, 30)
+#' )
+#' df_test <- data.frame(
+#'   M1 = rnorm(5), M2 = rnorm(5),
+#'   sd_M1 = rep(0.1, 5), sd_M2 = rep(0.2, 5)
+#' )
+#'
+#' my_ensemble <- fit_bmetapred(
+#'   data_train = df_train,
+#'   y = "Y",
+#'   predictors = c("M1", "M2"),
+#'   sd_cols = c("sd_M1", "sd_M2"),
+#'   method = "stacking",
+#'   parallel_workers = 1,
+#'   cores_stan = 1,
+#'   iter_stan = 300,
+#'   verbosity = 0
+#' )
+#'
+#' predictions <- predict(my_ensemble, newdata = df_test, n_samples_totales = 200, verbosity = 0)
 #' head(predictions)
 #' }
 
@@ -136,7 +158,9 @@ predict.bmetapred_model <- function(object, newdata, n_samples_totales = 2000,
         warmup_stan <- floor(iter_stan / 2)
         fit_final <- stats::update(base_models[[base_key]], newdata = df_temp_train,
                                    refresh = 0, silent = 2, iter = iter_stan, warmup = warmup_stan, chains = 2, cores = cores_stan)
+
         preds_completas <- brms::posterior_predict(fit_final, newdata = df_temp_test)
+
         rm(fit_final); gc(verbose=FALSE)
       }))))
 
@@ -174,11 +198,17 @@ predict.bmetapred_model <- function(object, newdata, n_samples_totales = 2000,
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Assuming `my_ensemble` is a fitted bmetapred_model:
-#' pips <- get_pip_bmetapred(my_ensemble)
-#' print(pips)
-#' }
+#' # Create a small bmetapred_model object for fast testing
+#' mock_ensemble <- structure(
+#'   list(
+#'     pesos = c(0.6, 0.3, 0.1),
+#'     top_indices = list(c(1, 1, 0), c(1, 0, 1), c(0, 1, 0)),
+#'     params = list(predictors = c("M1", "M2", "M3")),
+#'     method = "stacking"
+#'   ),
+#'   class = "bmetapred_model"
+#' )
+#' pips <- get_pip_bmetapred(mock_ensemble)
 
 get_pip_bmetapred <- function(object) {
   pesos <- as.numeric(object$pesos)
@@ -216,10 +246,17 @@ get_pip_bmetapred <- function(object) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Assuming `my_ensemble` is a fitted bmetapred_model:
-#' summary_table <- summary(my_ensemble)
-#' }
+#' # Create a lightweight mock bmetapred_model object for fast testing
+#' mock_ensemble <- structure(
+#'   list(
+#'     pesos = c(0.6, 0.3, 0.1),
+#'     top_indices = list(c(1, 1, 0), c(1, 0, 1), c(0, 1, 0)),
+#'     params = list(predictors = c("M1", "M2", "M3")),
+#'     method = "stacking"
+#'   ),
+#'   class = "bmetapred_model"
+#' )
+#' summary_table <- summary(mock_ensemble)
 
 summary.bmetapred_model <- function(object, ...) {
   pesos <- as.numeric(object$pesos)
@@ -268,13 +305,9 @@ summary.bmetapred_model <- function(object, ...) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Historical validation data
-#' df_val <- data.frame(Y = rnorm(100), M1 = rnorm(100), M2 = rnorm(100))
-#'
-#' # Fit the LOESS error estimators
+#' set.seed(123)
+#' df_val <- data.frame(Y = rnorm(50), M1 = rnorm(50), M2 = rnorm(50))
 #' loess_estimators <- fit_LOESS(df_val, y = "Y", predictors = c("M1", "M2"))
-#' }
 
 fit_LOESS <- function(data, y, predictors, span = 0.4) {
   if (!y %in% names(data)) stop("Target variable 'y' not found in data.")
@@ -336,11 +369,12 @@ fit_LOESS <- function(data, y, predictors, span = 0.4) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Assuming `loess_estimators` is fitted and `df_new` contains new predictions
+#' set.seed(123)
+#' df_val <- data.frame(Y = rnorm(50), M1 = rnorm(50), M2 = rnorm(50))
+#' loess_estimators <- fit_LOESS(df_val, y = "Y", predictors = c("M1", "M2"))
+#'
+#' df_new <- data.frame(M1 = rnorm(10), M2 = rnorm(10))
 #' df_ready <- predict(loess_estimators, newdata = df_new)
-#' head(df_ready)
-#' }
 
 predict.bmetapred_loess <- function(object, newdata, prefix = "sd_", min_var = 0.0004, ...) {
   out_data <- newdata
