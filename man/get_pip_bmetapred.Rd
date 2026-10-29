@@ -18,9 +18,15 @@ Calculates the Posterior Inclusion Probability (PIP) for each predictor (model)
 variable evaluated during the ensemble fitting process.
 }
 \examples{
-\dontrun{
-# Assuming `my_ensemble` is a fitted bmetapred_model:
-pips <- get_pip_bmetapred(my_ensemble)
-print(pips)
-}
+# Create a small bmetapred_model object for fast testing
+mock_ensemble <- structure(
+  list(
+    pesos = c(0.6, 0.3, 0.1),
+    top_indices = list(c(1, 1, 0), c(1, 0, 1), c(0, 1, 0)),
+    params = list(predictors = c("M1", "M2", "M3")),
+    method = "stacking"
+  ),
+  class = "bmetapred_model"
+)
+pips <- get_pip_bmetapred(mock_ensemble)
 }

@@ -16,10 +16,14 @@ fit_bmetapred(
   min_K = 10,
   max_K = 50,
   pri_sd = 2.5,
+  pri_sd_int = 5,
+  pri_sd_sigma = 0.5,
+  pri_sd_int_sigma = 5,
   parallel_workers = 1,
   cores_stan = 1,
   iter_stan = 1500,
-  verbosity = 1
+  verbosity = 1,
+  backend = "rstan"
 )
 }
 \arguments{
@@ -54,6 +58,14 @@ Default is 50.}
 \item{pri_sd}{Numeric. Prior standard deviation for the regression coefficients.
 Default is 2.5.}
 
+\item{pri_sd_int}{Numeric. Prior standard deviation for the intercepts.
+Default is 5.}
+
+\item{pri_sd_sigma}{Numeric. Prior standard deviation for the sigma coefficients.
+Default is 0.5.}
+
+\item{pri_sd_int_sigma}{Numeric. Prior standard deviation for the sigma intercept. Default is 2.}
+
 \item{parallel_workers}{Integer. Number of workers for parallel evaluation of the model space.
 Default is 1 (sequential execution).}
 
@@ -63,6 +75,11 @@ Default is 1 (sequential execution).}
 
 \item{verbosity}{Integer. Level of printed messages. \code{0} suppresses output,
 \code{1} prints progress. Default is 1.}
+
+\item{backend}{Character string specifying the package to use as the backend for \code{brms}.
+Default is \code{"rstan"}. However, for intensive computational tasks and large model spaces,
+we highly recommend installing \code{"cmdstanr"} (available from the Stan-dev repository)
+and setting \code{backend = "cmdstanr"} to improve memory management and speed.}
 }
 \value{
 An object of class \code{bmetapred_model} containing the optimized ensemble weights,
@@ -76,25 +93,25 @@ Uses either an exhaustive search or a Markov Chain Monte Carlo (MC3) algorithm
 to explore the meta-model space and calculate pBMA/Stacking weights.
 }
 \examples{
-\dontrun{
-# Toy example
+\donttest{
+set.seed(123)
 df <- data.frame(
-  Y = rnorm(50),
-  M1 = rnorm(50), M2 = rnorm(50), M3 = rnorm(50),
-  sd_M1 = rep(0.1, 50), sd_M2 = rep(0.2, 50), sd_M3 = rep(0.15, 50)
+  Y = rnorm(30),
+  M1 = rnorm(30), M2 = rnorm(30),
+  sd_M1 = rep(0.1, 30), sd_M2 = rep(0.2, 30)
 )
 
 my_ensemble <- fit_bmetapred(
   data_train = df,
   y = "Y",
-  predictors = c("M1", "M2", "M3"),
-  sd_cols = c("sd_M1", "sd_M2", "sd_M3"),
+  predictors = c("M1", "M2"),
+  sd_cols = c("sd_M1", "sd_M2"),
   method = "stacking",
-  parallel_workers = 2,
+  parallel_workers = 1,
   cores_stan = 1,
-  iter_stan = 1000,
-  n_iter_mc3 = 100,
-  verbosity = 1
+  iter_stan = 300,
+  verbosity = 0
 )
+summary(my_ensemble)
 }
 }

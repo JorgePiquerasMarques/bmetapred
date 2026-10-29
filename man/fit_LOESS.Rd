@@ -27,11 +27,7 @@ estimates. The LOESS model predicts the squared error as a function of the
 predicted value.
 }
 \examples{
-\dontrun{
-# Historical validation data
-df_val <- data.frame(Y = rnorm(100), M1 = rnorm(100), M2 = rnorm(100))
-
-# Fit the LOESS error estimators
+set.seed(123)
+df_val <- data.frame(Y = rnorm(50), M1 = rnorm(50), M2 = rnorm(50))
 loess_estimators <- fit_LOESS(df_val, y = "Y", predictors = c("M1", "M2"))
-}
 }

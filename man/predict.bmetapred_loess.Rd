@@ -30,9 +30,10 @@ of extrapolations by capping predictions at the boundary values of the
 original training data to prevent \code{NA}s or collapsed variances.
 }
 \examples{
-\dontrun{
-# Assuming `loess_estimators` is fitted and `df_new` contains new predictions
+set.seed(123)
+df_val <- data.frame(Y = rnorm(50), M1 = rnorm(50), M2 = rnorm(50))
+loess_estimators <- fit_LOESS(df_val, y = "Y", predictors = c("M1", "M2"))
+
+df_new <- data.frame(M1 = rnorm(10), M2 = rnorm(10))
 df_ready <- predict(loess_estimators, newdata = df_new)
-head(df_ready)
-}
 }

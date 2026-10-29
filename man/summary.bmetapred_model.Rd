@@ -20,8 +20,15 @@ Provides a tabular summary of the meta-models included in the final ensemble,
 displaying their structural formula, rank, and assigned weight.
 }
 \examples{
-\dontrun{
-# Assuming `my_ensemble` is a fitted bmetapred_model:
-summary_table <- summary(my_ensemble)
-}
+# Create a lightweight mock bmetapred_model object for fast testing
+mock_ensemble <- structure(
+  list(
+    pesos = c(0.6, 0.3, 0.1),
+    top_indices = list(c(1, 1, 0), c(1, 0, 1), c(0, 1, 0)),
+    params = list(predictors = c("M1", "M2", "M3")),
+    method = "stacking"
+  ),
+  class = "bmetapred_model"
+)
+summary_table <- summary(mock_ensemble)
 }

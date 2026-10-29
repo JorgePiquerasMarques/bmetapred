@@ -58,9 +58,31 @@ based on a fitted ensemble model. It samples from
 the underlying \code{brms} base models proportionally to their optimized weights.
 }
 \examples{
-\dontrun{
-# Assuming `my_ensemble` is a fitted bmetapred_model and `test_data` is available:
-predictions <- predict(my_ensemble, newdata = test_data, n_samples_totales = 1000)
+\donttest{
+set.seed(123)
+df_train <- data.frame(
+  Y = rnorm(30),
+  M1 = rnorm(30), M2 = rnorm(30),
+  sd_M1 = rep(0.1, 30), sd_M2 = rep(0.2, 30)
+)
+df_test <- data.frame(
+  M1 = rnorm(5), M2 = rnorm(5),
+  sd_M1 = rep(0.1, 5), sd_M2 = rep(0.2, 5)
+)
+
+my_ensemble <- fit_bmetapred(
+  data_train = df_train,
+  y = "Y",
+  predictors = c("M1", "M2"),
+  sd_cols = c("sd_M1", "sd_M2"),
+  method = "stacking",
+  parallel_workers = 1,
+  cores_stan = 1,
+  iter_stan = 300,
+  verbosity = 0
+)
+
+predictions <- predict(my_ensemble, newdata = df_test, n_samples_totales = 200, verbosity = 0)
 head(predictions)
 }
 }
