@@ -8,8 +8,8 @@ incorporating the prediction errors of the base models.
 When base models do not report native uncertainties, bmetapred includes
 tools to estimate heteroscedastic errors from historical validation data
 using Local Polynomial Regression (LOESS). The meta-model space is
-efficiently explored using exhaustive search or a Markov Chain Monte
-Carlo Model Composition (MC3) algorithm powered by brms.
+efficiently explored using exhaustive search (9 or less models), a Markov Chain Monte
+Carlo Model Composition (MC3) algorithm (more than 9 models; Pseudo-BMA) or a tabu-guided heuristic search with parallel tempering (more than 9 models; Bayesian Stacking).
 
 ## Installation
 
@@ -50,7 +50,8 @@ my_ensemble <- fit_bmetapred(
   parallel_workers = 2, # Explore model space in parallel
   cores_stan = 1,       # Cores for individual brms models
   iter_stan = 1500,     # MCMC iterations
-  verbosity = 1
+  verbosity = 1,
+  backend = "cmdstanr"
 )
 
 # 3. Model Inspection and Prediction
@@ -70,6 +71,10 @@ chains) to make the exploration of large model spaces computationally
 viable, avoiding redundant compilations.
 
 ## FAQ
+
+Q: \[Which backend should I use?\] A: \[Default is "rstan". However, for intensive computational tasks and large model spaces,
+we highly recommend installing "cmdstanr" (available from the Stan-dev repository)
+and setting backend = "cmdstanr" to improve memory management and speed.\].
 
 Q: \[Is the fit_LOESS required?\] A: \[No. bmetapred can be used
 directly when prediction errors (standard deviations) are already
